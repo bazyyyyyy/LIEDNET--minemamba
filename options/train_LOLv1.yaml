@@ -8,8 +8,8 @@ MODEL:
 
 # Optimization arguments.
 OPTIM:
-  BATCH: 4  # Reduced from 8 to save GPU memory (4 → 121 batches, 8 → 61 batches)
-  EPOCHS: 500
+  BATCH: 8  # Reduced from 8 to save GPU memory (4 → 121 batches, 8 → 61 batches)
+  EPOCHS: 4000
   # EPOCH_DECAY: [10]
   LR_INITIAL: 1e-4
   LR_MIN: 1e-6
