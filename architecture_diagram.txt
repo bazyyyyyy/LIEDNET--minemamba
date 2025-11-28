@@ -1,0 +1,143 @@
+================================================================================
+                    LIEDNet 架构图 (Restormer框架 + VSSLocalBlock)
+================================================================================
+
+输入: I (H×W×3)
+  │
+  ▼
+[Patch Embedding] 2×2 Conv, stride=2
+  │
+  ▼ (H/2 × W/2 × C, C=32)
+  │
+┌─────────────────────────────────────────────────────────────────┐
+│                        ENCODER (编码器)                          │
+└─────────────────────────────────────────────────────────────────┘
+  │
+  ▼
+[VSSLocalBlock × 1] ── Level 1 ── (H/2 × W/2 × C)
+  │ hidden_dim = C (32)
+  │
+  ▼ [Downsample] PixelUnshuffle
+  │
+  ▼ (H/4 × W/4 × 2C)
+  │
+[VSSLocalBlock × 2] ── Level 2 ── (H/4 × W/4 × 2C)
+  │ hidden_dim = 2C (64)
+  │
+  ▼ [Downsample] PixelUnshuffle
+  │
+  ▼ (H/8 × W/8 × 4C)
+  │
+[VSSLocalBlock × 4] ── Level 3 ── (H/8 × W/8 × 4C)
+  │ hidden_dim = 4C (128)
+  │
+  ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                        DECODER (解码器)                          │
+└─────────────────────────────────────────────────────────────────┘
+  │
+  ▼ [Upsample] PixelShuffle (4C → 2C)
+  │
+  ▼ (H/4 × W/4 × 2C)
+  │
+[1×1 Conv] reduce_chan_level2 (2C → 2C, 恒等映射)
+  │
+  ▼
+[VSSLocalBlock × 2] ── Decoder Level 2 ── (H/4 × W/4 × 2C)
+  │ hidden_dim = 2C (64)
+  │ ⚠️ 注意：没有使用 skip connection
+  │
+  ▼ [Upsample] PixelShuffle (2C → 1C)
+  │
+  ▼ (H/2 × W/2 × 1C)
+  │
+[Concat] ── 与 Encoder Level 1 输出拼接 ── (H/2 × W/2 × 2C)
+  │
+  ▼
+[1×1 Conv] reduce_chan_level1 (2C → 2C)
+  │
+  ▼
+[VSSLocalBlock × 1] ── Decoder Level 1 ── (H/2 × W/2 × 2C)
+  │ hidden_dim = 2C (64)
+  │ ✓ 使用 skip connection (与 encoder_level1)
+  │
+  ▼
+[VSSLocalBlock × 4] ── Refinement ── (H/2 × W/2 × 2C)
+  │ hidden_dim = 2C (64)
+  │
+  ▼
+[Recover] Conv + PixelShuffle (2C → 2C, H/2×W/2 → H×W)
+  │
+  ▼ (H × W × 2C)
+  │
+[Output] 3×3 Conv (2C → 3)
+  │
+  ▼
+[Residual] + 原始输入 I
+  │
+  ▼
+输出: Î (H×W×3)
+
+================================================================================
+关键特性说明：
+================================================================================
+
+1. ✅ 使用 Restormer 的 U-Net 框架结构（3层编码器-解码器）
+2. ✅ 核心模块：VSSLocalBlock（替代 Restormer 的 TransformerBlock）
+   - VSSLocalBlock = VSSM (全局) + LFM (局部) + DGDFFN (前馈)
+3. ⚠️ Decoder Level 2：没有使用 skip connection（为了减少参数量）
+4. ✅ Decoder Level 1：使用 skip connection（与 Encoder Level 1）
+5. ✅ 保留原有的 recover 和 residual 连接
+
+================================================================================
+通道数变化流程 (dim=32):
+================================================================================
+
+输入: 3
+  ↓
+Patch Embed: 32 (C)
+  ↓
+Encoder L1: 32 (C)
+  ↓
+Encoder L2: 64 (2C)
+  ↓
+Encoder L3: 128 (4C)
+  ↓
+Upsample: 64 (2C) ← 注意：Upsample输出是输入的一半
+  ↓
+Decoder L2: 64 (2C)
+  ↓
+Upsample: 32 (1C)
+  ↓
+Concat: 64 (2C) ← 32 + 32
+  ↓
+Decoder L1: 64 (2C)
+  ↓
+Refinement: 64 (2C)
+  ↓
+Recover: 64 (2C)
+  ↓
+Output: 3
+
+================================================================================
+与 Restormer 的对比：
+================================================================================
+
+Restormer 原始结构：
+  - 4层编码器-解码器
+  - TransformerBlock (MDTA + GDFN)
+  - 所有解码层都有 skip connection
+
+当前 LIEDNet 结构：
+  - 3层编码器-解码器（去掉了第4层）
+  - VSSLocalBlock (VSSM + LFM + DGDFFN)
+  - 只有 Decoder Level 1 有 skip connection
+  - 保留了 recover 和 refine_head（如果存在）
+
+================================================================================
+
+
+
+
+
+
