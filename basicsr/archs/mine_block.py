@@ -252,3 +252,9 @@ class MineBlock(nn.Module):
             fused = 0.5 * f_illum + 0.5 * f_refl
 
         return fused + residual
+def forward(self, x, E0=None):
+    if E0 is None:
+        E0 = x.mean(dim=1, keepdim=True).detach()  # 兜底
+    # ... 原有逻辑 ...
+    fused, _ = self.gate(E0, f_illum, f_refl)
+    return fused + x
